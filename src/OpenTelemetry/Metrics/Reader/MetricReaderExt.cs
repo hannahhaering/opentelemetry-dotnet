@@ -126,7 +126,7 @@ public abstract partial class MetricReader
                     ? this.exemplarFilterForHistograms ?? this.exemplarFilter
                     : this.exemplarFilter;
 
-                if (!MeterProviderBuilderSdk.IsValidInstrumentName(metricStreamIdentity.InstrumentName))
+                if (!Guard.IsValidInstrumentName(metricStreamIdentity.InstrumentName))
                 {
                     OpenTelemetrySdkEventSource.Log.MetricInstrumentIgnored(
                         metricStreamIdentity.InstrumentName,
