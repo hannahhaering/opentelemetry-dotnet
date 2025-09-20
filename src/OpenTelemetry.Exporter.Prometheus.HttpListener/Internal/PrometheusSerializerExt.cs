@@ -30,6 +30,9 @@ internal static partial class PrometheusSerializer
 
         if (!metric.MetricType.IsHistogram())
         {
+            bool isLong = ((int)metric.MetricType & 0b_0000_1111) == 0x0a; // I8
+            bool isSum = metric.MetricType.IsSum();
+            bool isMonotonicSum = metric.MetricType.IsMonotonicSum();
             foreach (ref readonly var metricPoint in metric.GetMetricPoints())
             {
                 var timestamp = metricPoint.EndTime.ToUnixTimeMilliseconds();
@@ -40,31 +43,9 @@ internal static partial class PrometheusSerializer
 
                 buffer[cursor++] = unchecked((byte)' ');
 
-                // TODO: MetricType is same for all MetricPoints
-                // within a given Metric, so this check can avoided
-                // for each MetricPoint
-                if (((int)metric.MetricType & 0b_0000_1111) == 0x0a /* I8 */)
-                {
-                    if (metric.MetricType.IsSum())
-                    {
-                        cursor = WriteLong(buffer, cursor, metricPoint.GetSumLong());
-                    }
-                    else
-                    {
-                        cursor = WriteLong(buffer, cursor, metricPoint.GetGaugeLastValueLong());
-                    }
-                }
-                else
-                {
-                    if (metric.MetricType.IsSum())
-                    {
-                        cursor = WriteDouble(buffer, cursor, metricPoint.GetSumDouble());
-                    }
-                    else
-                    {
-                        cursor = WriteDouble(buffer, cursor, metricPoint.GetGaugeLastValueDouble());
-                    }
-                }
+                cursor = isLong
+                    ? WriteLong(buffer, cursor, GetMetricPointLongValue(metricPoint, isSum, isMonotonicSum))
+                    : WriteDouble(buffer, cursor, GetMetricPointDoubleValue(metricPoint, isSum, isMonotonicSum));
 
                 buffer[cursor++] = unchecked((byte)' ');
 
@@ -141,5 +122,29 @@ internal static partial class PrometheusSerializer
         }
 
         return cursor;
+    }
+
+    private static double GetMetricPointDoubleValue(MetricPoint point, bool isSum, bool isMonotonicSum)
+    {
+        if (isSum)
+        {
+            return isMonotonicSum
+                ? point.GetSumDouble() // monotonic sum -> counter
+                : point.GetGaugeLastValueDouble(); // non-monotonic sum -> gauge
+        }
+
+        return point.GetGaugeLastValueDouble();
+    }
+
+    private static long GetMetricPointLongValue(MetricPoint point, bool isSum, bool isMonotonicSum)
+    {
+        if (isSum)
+        {
+            return isMonotonicSum
+                ? point.GetSumLong() // monotonic sum -> counter
+                : point.GetGaugeLastValueLong(); // non-monotonic sum -> gauge
+        }
+
+        return point.GetGaugeLastValueLong();
     }
 }

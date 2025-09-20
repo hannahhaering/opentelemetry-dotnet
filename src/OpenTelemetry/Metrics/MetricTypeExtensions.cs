@@ -49,6 +49,18 @@ public static class MetricTypeExtensions
     }
 
     /// <summary>
+    /// Determines if the supplied <see cref="MetricType"/> is a monotonic sum.
+    /// </summary>
+    /// <param name="self"><see cref="MetricType"/>.</param>
+    /// <returns><see langword="true"/> if the supplied <see cref="MetricType"/>
+    /// is a monotonic sum definition.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static bool IsMonotonicSum(this MetricType self)
+    {
+        return (self & METRIC_TYPE_MASK) == METRIC_TYPE_MONOTONIC_SUM;
+    }
+
+    /// <summary>
     /// Determines if the supplied <see cref="MetricType"/> is a gauge definition.
     /// </summary>
     /// <param name="self"><see cref="MetricType"/>.</param>
