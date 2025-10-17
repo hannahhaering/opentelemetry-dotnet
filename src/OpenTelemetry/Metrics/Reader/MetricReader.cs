@@ -37,6 +37,8 @@ public abstract partial class MetricReader : IDisposable
         };
     };
 
+    private List<IMetricProducer> metricProducers = new();
+
     private readonly Lock newTaskLock = new();
     private readonly Lock onCollectLock = new();
     private readonly TaskCompletionSource<bool> shutdownTcs = new();
@@ -75,6 +77,11 @@ public abstract partial class MetricReader : IDisposable
                 _ => CumulativeTemporalityPreferenceFunc,
             };
         }
+    }
+
+    public void RegisterMetricProducer(IMetricProducer metricProducer)
+    {
+        this.metricProducers.Add(metricProducer);
     }
 
     /// <summary>
