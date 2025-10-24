@@ -4,6 +4,7 @@
 using System.Diagnostics;
 using System.Diagnostics.Metrics;
 using OpenTelemetry.Internal;
+using OpenTelemetry.Resources;
 
 namespace OpenTelemetry.Metrics;
 
@@ -37,8 +38,6 @@ public abstract partial class MetricReader : IDisposable
         };
     };
 
-    private List<IMetricProducer> metricProducers = new();
-
     private readonly Lock newTaskLock = new();
     private readonly Lock onCollectLock = new();
     private readonly TaskCompletionSource<bool> shutdownTcs = new();
@@ -47,6 +46,7 @@ public abstract partial class MetricReader : IDisposable
     private int shutdownCount;
     private TaskCompletionSource<bool>? collectionTcs;
     private BaseProvider? parentProvider;
+    private List<IMetricProducer> metricProducers = new();
 
     /// <summary>
     /// Gets or sets the metric reader temporality preference.
@@ -280,13 +280,16 @@ public abstract partial class MetricReader : IDisposable
 
         OpenTelemetrySdkEventSource.Log.MetricReaderEvent("Observable instruments collected.");
 
-        var metrics = this.GetMetricsBatch();
+        var sdkMetricsBatch = this.GetMetricsBatch();
+        var producerMetricsBatch = this.GetMetricsBatchFromProducers(meterProviderSdk?.Resource ?? Resource.Empty);
+
+        var combinedMetricsBatch = MergeBatches(sdkMetricsBatch, producerMetricsBatch);
 
         bool result;
         if (sw == null)
         {
             OpenTelemetrySdkEventSource.Log.MetricReaderEvent("ProcessMetrics called.");
-            result = this.ProcessMetrics(metrics, Timeout.Infinite);
+            result = this.ProcessMetrics(combinedMetricsBatch, Timeout.Infinite);
             if (result)
             {
                 OpenTelemetrySdkEventSource.Log.MetricReaderEvent("ProcessMetrics succeeded.");
@@ -309,7 +312,7 @@ public abstract partial class MetricReader : IDisposable
             }
 
             OpenTelemetrySdkEventSource.Log.MetricReaderEvent("ProcessMetrics called.");
-            result = this.ProcessMetrics(metrics, (int)timeout);
+            result = this.ProcessMetrics(combinedMetricsBatch, (int)timeout);
             if (result)
             {
                 OpenTelemetrySdkEventSource.Log.MetricReaderEvent("ProcessMetrics succeeded.");
@@ -354,5 +357,33 @@ public abstract partial class MetricReader : IDisposable
     /// </param>
     protected virtual void Dispose(bool disposing)
     {
+    }
+
+    private static Batch<Metric> MergeBatches(Batch<Metric> firstBatch, Batch<Metric> secondBatch)
+    {
+        if (firstBatch.Count == 0)
+        {
+            return secondBatch;
+        }
+
+        if (secondBatch.Count == 0)
+        {
+            return firstBatch;
+        }
+
+        var merged = new Metric[firstBatch.Count + secondBatch.Count];
+        int index = 0;
+
+        foreach (var metric in firstBatch)
+        {
+            merged[index++] = metric;
+        }
+
+        foreach (var metric in secondBatch)
+        {
+            merged[index++] = metric;
+        }
+
+        return new Batch<Metric>(merged, merged.Length);
     }
 }

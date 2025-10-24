@@ -6,6 +6,7 @@ using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Diagnostics.Metrics;
 using OpenTelemetry.Internal;
+using OpenTelemetry.Resources;
 
 namespace OpenTelemetry.Metrics;
 
@@ -243,6 +244,40 @@ public abstract partial class MetricReader
             OpenTelemetrySdkEventSource.Log.MetricReaderException(nameof(this.GetMetricsBatch), ex);
             return default;
         }
+    }
+
+    private Batch<Metric> GetMetricsBatchFromProducers(Resource resource)
+    {
+        if (this.metricProducers.Count == 0)
+        {
+            return default;
+        }
+
+        var producerMetrics = new List<Metric>();
+
+        foreach (var producer in this.metricProducers)
+        {
+            try
+            {
+                var metrics = producer.Produce(resource);
+                if (metrics != null)
+                {
+                    producerMetrics.AddRange(metrics);
+                }
+            }
+            catch (Exception ex)
+            {
+                OpenTelemetrySdkEventSource.Log.MetricReaderException(
+                    $"MetricProducer '{producer.GetType().Name}' failed", ex);
+            }
+        }
+
+        if (producerMetrics.Count == 0)
+        {
+            return default;
+        }
+
+        return new Batch<Metric>(producerMetrics.ToArray(), producerMetrics.Count);
     }
 
     private void RemoveMetric(ref Metric? metric)
